@@ -16,9 +16,9 @@ FPS = 60
 JUMP_VEL = 6.0
 GRAVITY = 0.4
 
-MAX_SPEED = 18.0
+MAX_SPEED = 25.0
 
-SEED = 2
+SEED = 4    # Seed for random number generation, always same seed for reproducibility
 
 # Define the neural network model
 model = models.Sequential([
@@ -81,6 +81,7 @@ cactus2_img = pygame.image.load("assets/cactus2.png")
 cactus3_img = pygame.image.load("assets/cactus3.png")
 ufo_img = pygame.image.load("assets/ufo.png")
 track = pygame.image.load("assets/track.png")
+cloud = pygame.image.load("assets/cloud.png")
 
 # rects
 dino_rect = dino_img.get_rect()
