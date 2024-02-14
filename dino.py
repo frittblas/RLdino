@@ -1,3 +1,7 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # or any {'0', '1', '2'}
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from keras import layers, models
 from keras.models import load_model
 import numpy as np
@@ -33,8 +37,8 @@ epsilon = 1.0  # exploration rate
 epsilon_decay = 0.995  # decay rate for exploration
 
 # Training loop
-num_episodes = 100
-max_steps_per_episode = 60
+num_episodes = 10
+max_steps_per_episode = 600
 batch_size = 32
 discount_factor = 0.95
 replay_memory = []
@@ -80,8 +84,8 @@ cactus1_img = pygame.image.load("assets/cactus1.png")
 cactus2_img = pygame.image.load("assets/cactus2.png")
 cactus3_img = pygame.image.load("assets/cactus3.png")
 ufo_img = pygame.image.load("assets/ufo.png")
-track = pygame.image.load("assets/track.png")
-cloud = pygame.image.load("assets/cloud.png")
+track_img = pygame.image.load("assets/track.png")
+cloud_img = pygame.image.load("assets/cloud.png")
 
 # rects
 dino_rect = dino_img.get_rect()
@@ -91,16 +95,28 @@ dino_rect.y = HEIGHT / 2
 # obstacle list
 obstacles = []
 
+# cloud list
+clouds = []
+
+
 clock = pygame.time.Clock()
 
 # obstacle class
-
 class Obstacle:
     def __init__(self, image, x, y):
         self.image = image
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+        
+# cloud class
+class Cloud:
+    def __init__(self, x, y):
+        self.image = cloud_img
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        
 
 # game functions
 
@@ -117,7 +133,7 @@ def reset_game():
     screen.fill(BLACK)
     background()
     update_display(False)
-    time.sleep(2)
+    time.sleep(1)
     dino_rect = dino_img.get_rect()
     dino_rect.x = 20
     dino_rect.y = HEIGHT / 2
@@ -201,11 +217,11 @@ def logic():
         
 def background():
     global x_pos_bg, y_pos_bg
-    image_width = track.get_width()
-    screen.blit(track, (x_pos_bg, y_pos_bg))
-    screen.blit(track, (image_width + x_pos_bg, y_pos_bg))
+    image_width = track_img.get_width()
+    screen.blit(track_img, (x_pos_bg, y_pos_bg))
+    screen.blit(track_img, (image_width + x_pos_bg, y_pos_bg))
     if x_pos_bg <= -image_width:
-        screen.blit(track, (image_width + x_pos_bg, y_pos_bg))
+        screen.blit(track_img, (image_width + x_pos_bg, y_pos_bg))
         x_pos_bg = 0
     x_pos_bg -= speed
 
@@ -244,46 +260,6 @@ def update_display(alive):
     
     pygame.display.flip()
 
-def get_current_state():
-    return np.array([player_x, player_y, target_x, target_y])
-
-def execute_action(action):
-    global player_x, player_y
-    if action == 0:
-        player_x -= player_speed
-    elif action == 1:
-        player_x += player_speed
-    elif action == 2:
-        player_y -= player_speed
-    elif action == 3:
-        player_y += player_speed
-
-def get_reward():
-    global player_x, player_y, player_size, target_x, target_y
-    if (
-        player_x < target_x + player_size
-        and player_x + player_size > target_x
-        and player_y < target_y + player_size
-        and player_y + player_size > target_y
-    ):
-        return 1  # Positive reward if the player reaches the target
-    
-    # Check for collision with obstacles (add your obstacle conditions here)
-    elif (
-        # Add conditions for collision with obstacles
-        # For example, if the player collides with the screen boundaries
-        player_x < 0
-        or player_x + player_size > WIDTH
-        or player_y < 0
-        or player_y + player_size > HEIGHT
-    ):
-        return -1  # Negative reward for running into an obstacle
-
-    else:
-        return 0  # No reward otherwise
-    
-    
-    
     
 def play_game():
 
@@ -339,126 +315,133 @@ def play_game():
     
     
 
-def train_model():
+def get_current_state():
+    # The state will be the position of the player and the nearest obstacle
+    nearest_obstacle = min(obstacles, key=lambda o: o.rect.x - dino_rect.x)
+    return np.array([dino_rect.x, dino_rect.y, nearest_obstacle.rect.x, nearest_obstacle.rect.y])
 
-    global player_x, player_y, target_x, target_y, game_over, you_win
-    global player_size, player_speed, points, game_over, you_win
-    global replay_memory, epsilon
+def get_reward():
+    # Positive reward for staying alive, larger negative reward for dying
+    if game_over:
+        return -100
+    else:
+        return 1
+
+def execute_action(action):
+    global is_jumping, is_ducking
+    # Action 0 is jump, action 1 is duck
+    if action == 0:
+        if not is_jumping:
+            is_jumping = True
+            is_ducking = False
+    elif action == 1:
+        if not is_jumping:
+            is_ducking = True
+    elif action == 2:
+        is_ducking = False
+
+def train_model():
+    global epsilon
+    
+    # Create a separate random number generator for action selection
+    action_rng = np.random.RandomState()
 
     for episode in range(num_episodes):
+        # Reset the game state and get the initial state
         reset_game()
         state = get_current_state()
-        total_reward = 0
 
         for step in range(max_steps_per_episode):
-            # Exploration-exploitation trade-off
-            if np.random.rand() < epsilon:
-                action = np.random.randint(4)  # Explore
+            # Choose an action: either explore or exploit
+            if action_rng.rand() <= epsilon:
+                # Explore: select a random action
+                action = action_rng.choice([0, 1, 2])
             else:
-                q_values = model.predict(state.reshape(1, -1))
-                action = np.argmax(q_values)  # Exploit
+                # Exploit: select the action with max future reward
+                q_values = model.predict(state.reshape(1, 4))
+                action = np.argmax(q_values[0])
 
-            # Execute action in the environment
+            # Perform the action and get the new state and reward
             execute_action(action)
-
-            # Observe new state and reward
-            new_state = get_current_state()
+            next_state = get_current_state()
             reward = get_reward()
 
-            # Store experience in replay memory
-            replay_memory.append((state, action, reward, new_state))
+            # Store the experience in replay memory
+            replay_memory.append((state, action, reward, next_state))
 
-            # Sample a random batch from replay memory for training
-            batch = random.sample(replay_memory, min(batch_size, len(replay_memory)))
-            states, actions, rewards, next_states = zip(*batch)
+            # Train the model using replay memory
+            if len(replay_memory) > batch_size:
+                minibatch = random.sample(replay_memory, batch_size)
+                states, actions, rewards, next_states = zip(*minibatch)
+                target_q_values = model.predict(np.array(states))
+                next_q_values = model.predict(np.array(next_states))
+                for i in range(batch_size):
+                    target_q_values[i][actions[i]] = rewards[i]
+                    if not game_over:
+                        target_q_values[i][actions[i]] += discount_factor * np.max(next_q_values[i])
+                model.train_on_batch(np.array(states), target_q_values)
 
-            # Compute target Q-values for training
-            target_q_values = model.predict(np.array(states))
-            next_q_values = model.predict(np.array(next_states))
-            for i in range(len(batch)):
-                target_q_values[i][actions[i]] = rewards[i] + discount_factor * np.max(next_q_values[i])
+            # Update the current state
+            state = next_state
 
-            # Train the model
-            model.train_on_batch(np.array(states), target_q_values)
-
-            total_reward += reward
-            state = new_state
+            jump()
+            if not is_jumping:
+                duck()
+                
+            handle_obstacles()
+            collide()
+            logic()
             
-            update_display()
+            screen.fill(BLACK)
+            background()
+            update_display(True)
 
-            #clock.tick(FPS)
+            clock.tick(FPS)
 
-        # Decay exploration rate
-        epsilon *= epsilon_decay
-        
+            # If the game is over, break the loop
+            if game_over:
+                print("You Loose! Points: ", points)
+                break
 
-        print(f"Episode: {episode + 1}, Total Reward: {total_reward}")
+        # Decay the exploration rate after each episode
+        if epsilon > 0.01:
+            epsilon *= epsilon_decay
 
     # Save the trained model
-    model.save("trained_model.h5")
-
-
+    model.save('dino_skier_model.h5')
 
 
 def use_model():
-    global player_x, player_y, target_x, target_y, game_over, you_win
-    global player_size, player_speed, points, game_over, you_win
-
     # Load the trained model
-    loaded_model = load_model("trained_model.h5")
+    trained_model = models.load_model('dino_skier_model.h5')
 
+    # Play the game using the trained model
     while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    pygame.quit()
-                    sys.exit()
-
-        # Use the model to predict the action
+        reset_game()
         state = get_current_state()
-        q_values = loaded_model.predict(state.reshape(1, -1))
-        action = np.argmax(q_values)
 
-        # Execute action in the environment
-        execute_action(action)
+        while not game_over:
+            # Choose the best action based on the trained model
+            q_values = trained_model.predict(state.reshape(1, 4))
+            action = np.argmax(q_values[0])
 
-        # Observe new state and reward
-        new_state = get_current_state()
-        reward = get_reward()
+            # Perform the action and get the new state
+            execute_action(action)
+            state = get_current_state()
 
-        update_display()
+            jump()
+            if not is_jumping:
+                duck()
+                
+            handle_obstacles()
+            collide()
+            logic()
 
-        # Check for game over or win conditions
-        if (
-            player_x < target_x + player_size
-            and player_x + player_size > target_x
-            and player_y < target_y + player_size
-            and player_y + player_size > target_y
-        ):
-            you_win = True
-
-        if (
-            player_x < 0
-            or player_x > WIDTH
-            or player_y < 0
-            or player_y > HEIGHT
-        ):
-            game_over = True
-
-        if game_over:
-            print("Game Over!")
-            reset_game()
-
-        if you_win:
-            points += 1
-            print("You Win! Points: ", points)
-            #reset_game()
-
-        clock.tick(FPS)
+            screen.fill(BLACK)
+            background()
+            update_display(True)
+            
+            clock.tick(FPS)
 
 
 def main():
@@ -466,12 +449,16 @@ def main():
     random.seed(SEED)
     
     obstacles.append(Obstacle(cactus1_img, WIDTH, HEIGHT / 2))
-    #obstacles.append(Obstacle(cactus1_img, 500, HEIGHT / 2)) 
-    #obstacles.append(Obstacle(cactus2_img, 900, HEIGHT / 2))
+
+        
+    #clouds.append(Cloud(WIDTH / 2, HEIGHT / 4))
+    #clouds.append(Cloud(WIDTH / 4, HEIGHT / 6))
+    #clouds.append(Cloud(WIDTH / 1.5, HEIGHT / 8))
     
-    play_game()
+   
+    #play_game()
     #train_model()
-    #use_model()
+    use_model()
 
 if __name__ == "__main__":
     main()
