@@ -41,7 +41,7 @@ epsilon = 1.0  # exploration rate
 epsilon_decay = 0.995  # decay rate for exploration
 
 # Training loop
-num_episodes = 200
+num_episodes = 300
 max_steps_per_episode = 600000
 batch_size = 32
 discount_factor = 0.95
@@ -387,7 +387,7 @@ def train_model_v2():
     global epsilon
 
     #model = load_model('dino_skier_model.h5')
-    #epsilon = 0.5
+    #epsilon = 0.22229219984074702
 
     for episode in range(num_episodes):
         reset_game()
@@ -500,9 +500,9 @@ def main():
     #clouds.append(Cloud(WIDTH / 1.5, HEIGHT / 8))
     
    
-    play_game()
+    #play_game()
     #train_model_v2()
-    #use_model()
+    use_model()
 
 if __name__ == "__main__":
     main()
