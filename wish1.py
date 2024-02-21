@@ -308,8 +308,8 @@ def use_model():
 
 def main():
     #play_game()
-    #train_model()
-    use_model()
+    train_model()
+    #use_model()
 
 if __name__ == "__main__":
     main()

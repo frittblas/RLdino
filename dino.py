@@ -5,6 +5,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from keras import layers, models
 from keras.models import load_model
 import numpy as np
+from collections import deque
 import pygame
 import random
 import sys
@@ -41,7 +42,7 @@ epsilon = 1.0  # exploration rate
 epsilon_decay = 0.995  # decay rate for exploration
 
 # Training loop
-num_episodes = 300
+num_episodes = 220
 max_steps_per_episode = 600000
 batch_size = 32
 discount_factor = 0.95
@@ -122,7 +123,17 @@ class Cloud:
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
-        
+
+
+
+# Save the current standard output
+original_stdout = sys.stdout
+
+# Open a file in write mode to redirect the output
+f = open('output.log', 'w')
+# Redirect standard output to the file
+sys.stdout = f
+    
 
 # game functions
 
@@ -309,11 +320,11 @@ def execute_action(action):
     elif action == 1:
         if not is_jumping and not is_ducking:
             is_ducking = True
-            speed = speed / 2
+            #speed = speed / 2
     elif action == 2:
         if is_ducking:
             is_ducking = False
-            speed = speed * 2
+            #speed = speed * 2
         
 
     
@@ -354,8 +365,6 @@ def play_game():
         collide()
         logic()
         
-        
-        
         screen.fill(BLACK)
         background()
         update_display(True)
@@ -369,8 +378,6 @@ def play_game():
 
         clock.tick(FPS)
     
-    
-    
 
 def get_current_state():
     # Return the current state of the game
@@ -383,15 +390,20 @@ def get_reward():
     else:
         return 1
 
-def train_model_v2():
-    global epsilon
+def train_model():
 
-    #model = load_model('dino_skier_model.h5')
-    #epsilon = 0.22229219984074702
+    global player_x, player_y, game_over, you_win
+    global speed, points
+    global replay_memory, epsilon
 
     for episode in range(num_episodes):
         reset_game()
         state = get_current_state()
+        total_reward = 0
+        
+        same_action_count = 3
+        same_action_counter = 0
+        action = np.random.randint(3)
 
         for step in range(max_steps_per_episode):
             
@@ -400,20 +412,43 @@ def train_model_v2():
                     pygame.quit()
                     sys.exit()
             
-            if not is_jumping:
-            
-                if np.random.rand() <= epsilon:
-                    action = np.random.randint(0, 4)  # Explore: choose a random action
+            if same_action_counter == 0:
+                # Exploration-exploitation trade-off
+                if np.random.rand() < epsilon:
+                    action = np.random.randint(3)  # Explore
                 else:
-                    q_values = model.predict(state.reshape(1, 4))
-                    action = np.argmax(q_values[0])  # Exploit: choose the action with the highest q-value
+                    q_values = model.predict(state.reshape(1, -1))
+                    action = np.argmax(q_values)  # Exploit
 
-                execute_action(action)
-                next_state = get_current_state()
-                reward = get_reward()
-                model.fit(state.reshape(1, 4), np.array([reward]), epochs=1, verbose=0)
-                state = next_state
+            # Execute action in the environment
+            execute_action(action)
+            same_action_counter += 1
+            if same_action_counter == same_action_count:
+                same_action_counter = 0
 
+            # Observe new state and reward
+            new_state = get_current_state()
+            reward = get_reward()
+
+            # Store experience in replay memory
+            replay_memory.append((state, action, reward, new_state))
+
+            # Sample a random batch from replay memory for training
+            batch = random.sample(replay_memory, min(batch_size, len(replay_memory)))
+            states, actions, rewards, next_states = zip(*batch)
+
+            # Compute target Q-values for training
+            target_q_values = model.predict(np.array(states))
+            next_q_values = model.predict(np.array(next_states))
+            for i in range(len(batch)):
+                target_q_values[i][actions[i]] = rewards[i] + discount_factor * np.max(next_q_values[i])
+
+            # Train the model
+            model.train_on_batch(np.array(states), target_q_values)
+
+            total_reward += reward
+            state = new_state
+            
             jump()            
             duck()
             handle_obstacles()
@@ -434,18 +469,117 @@ def train_model_v2():
                 break
 
             #clock.tick(FPS)
-            time.sleep(0.01)
+            #time.sleep(0.01)
 
-        epsilon *= epsilon_decay  # Decrease the exploration rate
+        # Decay exploration rate
+        epsilon *= epsilon_decay
         
-        print("Episode: ", episode, " Epsilon: ", epsilon)
+        print(f"Episode: {episode + 1}, Total Reward: {total_reward}, Epsilon: {epsilon}")
+
+    # Save the trained model
+    model.save("dino_skier_model.h5")
+    
+
+def train_model_v2():
+
+    global player_x, player_y, game_over, you_win
+    global speed, points
+    global replay_memory, epsilon, batch_size
+
+    replay_memory_size = 10000  # Set the size of the replay memory buffer
+    replay_memory = deque(maxlen=replay_memory_size)  # Initialize a deque with maximum length
+
+    for episode in range(num_episodes):
+        reset_game()
+        state = get_current_state()
+        total_reward = 0
         
-    model.save('dino_skier_model.h5')
+        same_action_count = 3
+        same_action_counter = 0
+        action = np.random.randint(3)
+
+        for step in range(max_steps_per_episode):
+            
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+            
+            if same_action_counter == 0:
+                # Exploration-exploitation trade-off
+                if np.random.rand() < epsilon:
+                    action = np.random.randint(3)  # Explore
+                else:
+                    q_values = model.predict(state.reshape(1, -1))
+                    action = np.argmax(q_values)  # Exploit
+
+            # Execute action in the environment
+            execute_action(action)
+            same_action_counter += 1
+            if same_action_counter == same_action_count:
+                same_action_counter = 0
+
+            # Observe new state and reward
+            new_state = get_current_state()
+            reward = get_reward()
+
+            # Store experience in replay memory
+            replay_memory.append((state, action, reward, new_state))
+
+            # Sample a random batch from replay memory for training
+            batch_size = min(batch_size, len(replay_memory))  # Adjust batch size if replay memory is not full
+            batch = random.sample(replay_memory, batch_size)
+            states, actions, rewards, next_states = zip(*batch)
+
+            # Compute target Q-values for training
+            target_q_values = model.predict(np.array(states))
+            next_q_values = model.predict(np.array(next_states))
+            for i in range(len(batch)):
+                target_q_values[i][actions[i]] = rewards[i] + discount_factor * np.max(next_q_values[i])
+
+            # Train the model
+            model.train_on_batch(np.array(states), target_q_values)
+
+            total_reward += reward
+            state = new_state
+            
+            jump()            
+            duck()
+            handle_obstacles()
+            handle_flag()
+            collide()
+            logic()
+            
+            screen.fill(BLACK)
+            background()
+            update_display(True)
+
+            if game_over:
+                if you_win:
+                    print("You Win! Points: ", points)
+                else:
+                    print("You Loose! Points: ", points)
+                reset_game()
+                break
+
+            #clock.tick(FPS)
+            #time.sleep(0.01)
+
+        # Decay exploration rate
+        epsilon *= epsilon_decay
         
+        print(f"Episode: {episode + 1}, Total Reward: {total_reward}, Epsilon: {epsilon}")
+
+    # Save the trained model
+    model.save("dino_skier_model.h5")
+    replay_memory_size = len(replay_memory)
+    print("Size of replay memory:", replay_memory_size)
+    input("Press any key to continue...")
+
 
 def use_model():
     # Load the trained model
-    trained_model = load_model('dino_skier_model.h5')
+    loaded_model = load_model('dino_skier_model.h5')
 
     # Reset the game and get the initial state
     reset_game()
@@ -457,13 +591,17 @@ def use_model():
                 pygame.quit()
                 sys.exit()
 
-        # Use the trained model to predict the action
-        q_values = trained_model.predict(state.reshape(1, 4))
-        action = np.argmax(q_values[0])
-
-        # Perform the action
-        execute_action(action)
+        # Use the model to predict the action
         state = get_current_state()
+        q_values = loaded_model.predict(state.reshape(1, -1))
+        action = np.argmax(q_values)
+
+        # Execute action in the environment
+        execute_action(action)
+
+        # Observe new state and reward
+        new_state = get_current_state()
+        reward = get_reward()
 
         jump()
         duck()
@@ -476,7 +614,7 @@ def use_model():
         background()
         update_display(True)
 
-        #clock.tick(FPS)
+        clock.tick(FPS)
 
     if you_win:
         print("You Win! Points: ", points)
@@ -500,9 +638,13 @@ def main():
     #clouds.append(Cloud(WIDTH / 1.5, HEIGHT / 8))
     
    
-    #play_game()
-    #train_model_v2()
-    use_model()
+    play_game()
+    #train_model()
+    #use_model()
+    
+    # Restore the original standard output
+    sys.stdout = original_stdout
+    f.close()
 
 if __name__ == "__main__":
     main()
