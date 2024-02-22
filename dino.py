@@ -31,7 +31,7 @@ obstacle_rng = np.random.RandomState()
 
 # Define the neural network model
 model = models.Sequential([
-    layers.Dense(64, input_shape=(4,), activation='relu'),
+    layers.Dense(64, input_shape=(8,), activation='relu'),
     layers.Dense(4, activation='linear')  # 4 actions in the output layer
 ])
 
@@ -39,10 +39,10 @@ model.compile(optimizer='adam', loss='mse')
 
 # Define exploration parameters
 epsilon = 1.0  # exploration rate
-epsilon_decay = 0.995  # decay rate for exploration
+epsilon_decay = 0.985  # decay rate for exploration
 
 # Training loop
-num_episodes = 220
+num_episodes = 150
 max_steps_per_episode = 600000
 batch_size = 32
 discount_factor = 0.95
@@ -110,7 +110,8 @@ clock = pygame.time.Clock()
 
 # obstacle class
 class Obstacle:
-    def __init__(self, image, x, y):
+    def __init__(self, obs_type, image, x, y):
+        self.type = obs_type
         self.image = image
         self.rect = self.image.get_rect()
         self.rect.x = x
@@ -127,12 +128,12 @@ class Cloud:
 
 
 # Save the current standard output
-original_stdout = sys.stdout
+#original_stdout = sys.stdout
 
 # Open a file in write mode to redirect the output
-f = open('output.log', 'w')
+#f = open('output.log', 'w')
 # Redirect standard output to the file
-sys.stdout = f
+#sys.stdout = f
     
 
 # game functions
@@ -166,7 +167,7 @@ def reset_game():
     is_jumping = False
     is_ducking = False
     jump_vel = JUMP_VEL
-    speed = 4.0
+    speed = 5.0
     
     flag_rect.x = FLAG_POS
     
@@ -174,7 +175,8 @@ def reset_game():
     
     obstacle_rng.seed(SEED)
     
-    obstacles.append(Obstacle(cactus1_img, WIDTH, HEIGHT / 2))
+    obstacles.append(Obstacle(1, cactus1_img, WIDTH, HEIGHT / 2))
+    #obstacles.append(Obstacle(5, ufo_img, WIDTH, HEIGHT / 2 - 96))
 
 
 def jump():
@@ -228,26 +230,27 @@ def place_obstacles():
     iterations = 1
     
     if obstacle_rng.randint(1, 3) == 1:
-        iterations = 2
+        iterations = 1
     
     # for each iteration, place an obstacle
     for i in range(iterations):
     
         # generate random num between 1 and 3
-        num = obstacle_rng.randint(1, 5)
+        num = obstacle_rng.randint(1, 3)
         
         if num == 1:
-            obstacles.append(Obstacle(cactus1_img, WIDTH + x_offset, HEIGHT / 2 - 1))
+            obstacles.append(Obstacle(1, cactus1_img, WIDTH + x_offset, HEIGHT / 2 - 1))
         elif num == 2:
-            obstacles.append(Obstacle(cactus2_img, WIDTH + x_offset, HEIGHT / 2 - 1))
+            #obstacles.append(Obstacle(2, cactus2_img, WIDTH + x_offset, HEIGHT / 2 - 1))
+            obstacles.append(Obstacle(5, ufo_img, WIDTH + x_offset, HEIGHT / 2 - 96))
         elif num == 3:
-            obstacles.append(Obstacle(cactus3_img, WIDTH + x_offset, HEIGHT / 2 + 11))
+            obstacles.append(Obstacle(3, cactus3_img, WIDTH + x_offset, HEIGHT / 2 + 11))
         else:
             num2 = obstacle_rng.randint(1, 3)
             if num2 == 1:
-                obstacles.append(Obstacle(ufo_img, WIDTH + x_offset, HEIGHT / 2 - 20))
+                obstacles.append(Obstacle(4, ufo_img, WIDTH + x_offset, HEIGHT / 2 - 20))
             else:
-                obstacles.append(Obstacle(ufo_img, WIDTH + x_offset, HEIGHT / 2 - 96))
+                obstacles.append(Obstacle(5, ufo_img, WIDTH + x_offset, HEIGHT / 2 - 96))
                 
         x_offset = WIDTH / 2 + obstacle_rng.randint(-20, 20)
 
@@ -357,8 +360,7 @@ def play_game():
             
             
         jump()
-        if not is_jumping:
-            duck()
+        duck()
             
         handle_obstacles()
         handle_flag()
@@ -380,8 +382,10 @@ def play_game():
     
 
 def get_current_state():
+    global is_jumping, is_ducking
     # Return the current state of the game
-    return np.array([dino_rect.x, dino_rect.y, obstacles[0].rect.x, obstacles[0].rect.y])
+    dist = obstacles[0].rect.x - dino_rect.x
+    return np.array([dino_rect.x, dino_rect.y, obstacles[0].rect.x, obstacles[0].rect.y, obstacles[0].type, is_jumping, is_ducking, dist])
 
 def get_reward():
     # Positive reward for staying alive, larger negative reward for dying
@@ -395,6 +399,9 @@ def train_model():
     global player_x, player_y, game_over, you_win
     global speed, points
     global replay_memory, epsilon
+    
+    model = load_model('dino_skier_model.h5')
+    epsilon = 0.1  # Set a low exploration rate
 
     for episode in range(num_episodes):
         reset_game()
@@ -417,7 +424,7 @@ def train_model():
                 if np.random.rand() < epsilon:
                     action = np.random.randint(3)  # Explore
                 else:
-                    q_values = model.predict(state.reshape(1, -1))
+                    q_values = model.predict(state.reshape(1, 8))
                     action = np.argmax(q_values)  # Exploit
 
             # Execute action in the environment
@@ -428,6 +435,7 @@ def train_model():
 
             # Observe new state and reward
             new_state = get_current_state()
+            collide()
             reward = get_reward()
 
             # Store experience in replay memory
@@ -453,7 +461,7 @@ def train_model():
             duck()
             handle_obstacles()
             handle_flag()
-            collide()
+
             logic()
             
             screen.fill(BLACK)
@@ -478,103 +486,6 @@ def train_model():
 
     # Save the trained model
     model.save("dino_skier_model.h5")
-    
-
-def train_model_v2():
-
-    global player_x, player_y, game_over, you_win
-    global speed, points
-    global replay_memory, epsilon, batch_size
-
-    replay_memory_size = 10000  # Set the size of the replay memory buffer
-    replay_memory = deque(maxlen=replay_memory_size)  # Initialize a deque with maximum length
-
-    for episode in range(num_episodes):
-        reset_game()
-        state = get_current_state()
-        total_reward = 0
-        
-        same_action_count = 3
-        same_action_counter = 0
-        action = np.random.randint(3)
-
-        for step in range(max_steps_per_episode):
-            
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-            
-            if same_action_counter == 0:
-                # Exploration-exploitation trade-off
-                if np.random.rand() < epsilon:
-                    action = np.random.randint(3)  # Explore
-                else:
-                    q_values = model.predict(state.reshape(1, -1))
-                    action = np.argmax(q_values)  # Exploit
-
-            # Execute action in the environment
-            execute_action(action)
-            same_action_counter += 1
-            if same_action_counter == same_action_count:
-                same_action_counter = 0
-
-            # Observe new state and reward
-            new_state = get_current_state()
-            reward = get_reward()
-
-            # Store experience in replay memory
-            replay_memory.append((state, action, reward, new_state))
-
-            # Sample a random batch from replay memory for training
-            batch_size = min(batch_size, len(replay_memory))  # Adjust batch size if replay memory is not full
-            batch = random.sample(replay_memory, batch_size)
-            states, actions, rewards, next_states = zip(*batch)
-
-            # Compute target Q-values for training
-            target_q_values = model.predict(np.array(states))
-            next_q_values = model.predict(np.array(next_states))
-            for i in range(len(batch)):
-                target_q_values[i][actions[i]] = rewards[i] + discount_factor * np.max(next_q_values[i])
-
-            # Train the model
-            model.train_on_batch(np.array(states), target_q_values)
-
-            total_reward += reward
-            state = new_state
-            
-            jump()            
-            duck()
-            handle_obstacles()
-            handle_flag()
-            collide()
-            logic()
-            
-            screen.fill(BLACK)
-            background()
-            update_display(True)
-
-            if game_over:
-                if you_win:
-                    print("You Win! Points: ", points)
-                else:
-                    print("You Loose! Points: ", points)
-                reset_game()
-                break
-
-            #clock.tick(FPS)
-            #time.sleep(0.01)
-
-        # Decay exploration rate
-        epsilon *= epsilon_decay
-        
-        print(f"Episode: {episode + 1}, Total Reward: {total_reward}, Epsilon: {epsilon}")
-
-    # Save the trained model
-    model.save("dino_skier_model.h5")
-    replay_memory_size = len(replay_memory)
-    print("Size of replay memory:", replay_memory_size)
-    input("Press any key to continue...")
 
 
 def use_model():
@@ -593,7 +504,7 @@ def use_model():
 
         # Use the model to predict the action
         state = get_current_state()
-        q_values = loaded_model.predict(state.reshape(1, -1))
+        q_values = loaded_model.predict(state.reshape(1, 8))
         action = np.argmax(q_values)
 
         # Execute action in the environment
@@ -601,13 +512,14 @@ def use_model():
 
         # Observe new state and reward
         new_state = get_current_state()
+        collide()
         reward = get_reward()
 
         jump()
         duck()
         handle_obstacles()
         handle_flag()
-        collide()
+
         logic()
 
         screen.fill(BLACK)
@@ -623,11 +535,12 @@ def use_model():
 
 
 def main():
-    
+    np.random.seed(1)
     #random.seed(SEED)
     obstacle_rng.seed(SEED)
     
-    obstacles.append(Obstacle(cactus1_img, WIDTH, HEIGHT / 2))
+    obstacles.append(Obstacle(1, cactus1_img, WIDTH, HEIGHT / 2))
+    #obstacles.append(Obstacle(5, ufo_img, WIDTH, HEIGHT / 2 - 96))
 
 
     # place flag far to the right
@@ -638,13 +551,13 @@ def main():
     #clouds.append(Cloud(WIDTH / 1.5, HEIGHT / 8))
     
    
-    play_game()
-    #train_model()
+    #play_game()
+    train_model()
     #use_model()
     
     # Restore the original standard output
-    sys.stdout = original_stdout
-    f.close()
+    #sys.stdout = original_stdout
+    #f.close()
 
 if __name__ == "__main__":
     main()
