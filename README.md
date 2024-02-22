@@ -8,7 +8,5 @@ pip install pygame
 
 TODO:
 
-- Start menu with option to play, train etc (6 modes total)
-- Add better obstacle randomness (uneven patterns)
-- Add all modes
-- Add clouds
+- Add less reward/points when ducking
+- Add time score reward
