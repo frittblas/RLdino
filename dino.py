@@ -25,14 +25,14 @@ MAX_SPEED = 25.0
 
 SEED = 2    # Seed for random number generation, always same seed for reproducibility
 
-FLAG_POS = WIDTH * 15
+FLAG_POS = WIDTH * 7
 
 obstacle_rng = np.random.RandomState()
 
 # Define the neural network model
 model = models.Sequential([
-    layers.Dense(64, input_shape=(8,), activation='relu'),
-    layers.Dense(4, activation='linear')  # 4 actions in the output layer
+    layers.Dense(32, input_shape=(7,), activation='relu'),
+    layers.Dense(3, activation='linear')  # 3 actions in the output layer
 ])
 
 model.compile(optimizer='adam', loss='mse')
@@ -44,7 +44,7 @@ epsilon_decay = 0.985  # decay rate for exploration
 # Training loop
 num_episodes = 150
 max_steps_per_episode = 600000
-batch_size = 32
+batch_size = 16
 discount_factor = 0.95
 replay_memory = []
 
@@ -54,13 +54,9 @@ player_x = 20
 player_y = 20
 game_over = False
 you_win = False
-player_size = 16
-player_speed = 5
 is_jumping = False
 is_ducking = False
 points = 0
-game_over = False
-you_win = False
 
 x_pos_bg = 0
 y_pos_bg = HEIGHT / 2 + 20
@@ -102,9 +98,6 @@ flag_rect.y = HEIGHT / 2 - 65
 # obstacle list
 obstacles = []
 
-# cloud list
-clouds = []
-
 
 clock = pygame.time.Clock()
 
@@ -117,23 +110,14 @@ class Obstacle:
         self.rect.x = x
         self.rect.y = y
         
-# cloud class
-class Cloud:
-    def __init__(self, x, y):
-        self.image = cloud_img
-        self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
-
-
 
 # Save the current standard output
-#original_stdout = sys.stdout
+original_stdout = sys.stdout
 
 # Open a file in write mode to redirect the output
-#f = open('output.log', 'w')
+global_log_file = open('output.txt', 'w')
 # Redirect standard output to the file
-#sys.stdout = f
+sys.stdout = global_log_file
     
 
 # game functions
@@ -264,7 +248,10 @@ def logic():
         speed = MAX_SPEED
     
     #increase points slowly but no fractions are printed
-    points += 0.1
+    if is_ducking:
+        points += 0.05
+    else:
+        points += 0.1
     
         
 def background():
@@ -323,18 +310,18 @@ def execute_action(action):
     elif action == 1:
         if not is_jumping and not is_ducking:
             is_ducking = True
-            #speed = speed / 2
+            #speed = speed / 1.2
     elif action == 2:
         if is_ducking:
             is_ducking = False
-            #speed = speed * 2
+            #speed = speed * 1.2
         
 
     
 def play_game():
 
     global player_x, player_y, game_over, you_win
-    global player_size, player_speed, points, game_over, you_win
+    global points, game_over, you_win
     global is_jumping, is_ducking
     global dino_rect, speed
 
@@ -384,15 +371,23 @@ def play_game():
 def get_current_state():
     global is_jumping, is_ducking
     # Return the current state of the game
-    dist = obstacles[0].rect.x - dino_rect.x
-    return np.array([dino_rect.x, dino_rect.y, obstacles[0].rect.x, obstacles[0].rect.y, obstacles[0].type, is_jumping, is_ducking, dist])
+    #dist = obstacles[0].rect.x - dino_rect.x
+    return np.array([dino_rect.x, dino_rect.y, obstacles[0].rect.x, obstacles[0].rect.y, obstacles[0].type, is_jumping, is_ducking])
 
 def get_reward():
     # Positive reward for staying alive, larger negative reward for dying
-    if game_over:
+    if obstacles[0].rect.right < 1:
+        print("Reward: ", 10)
+        return 10
+    if you_win:
+        return 1000
+    elif game_over:
         return -100
     else:
-        return 1
+        if is_ducking or is_jumping:
+            return 0.1
+        else:
+            return 1
 
 def train_model():
 
@@ -400,8 +395,12 @@ def train_model():
     global speed, points
     global replay_memory, epsilon
     
-    model = load_model('dino_skier_model.h5')
-    epsilon = 0.1  # Set a low exploration rate
+    # Define the capacity for the replay memory
+    replay_memory_capacity = 10000
+    replay_memory = deque(maxlen=replay_memory_capacity)
+    
+    #model = load_model('dino_skier_model_200_ok.h5')
+    #epsilon = 0.0486  # Set a low exploration rate (like 0.1)
 
     for episode in range(num_episodes):
         reset_game()
@@ -419,12 +418,14 @@ def train_model():
                     pygame.quit()
                     sys.exit()
             
+            #if not is_jumping:
+            
             if same_action_counter == 0:
                 # Exploration-exploitation trade-off
                 if np.random.rand() < epsilon:
                     action = np.random.randint(3)  # Explore
                 else:
-                    q_values = model.predict(state.reshape(1, 8))
+                    q_values = model.predict(state.reshape(1, 7))
                     action = np.argmax(q_values)  # Exploit
 
             # Execute action in the environment
@@ -435,7 +436,12 @@ def train_model():
 
             # Observe new state and reward
             new_state = get_current_state()
+                
             collide()
+            handle_flag()
+            
+            #if not is_jumping:
+            
             reward = get_reward()
 
             # Store experience in replay memory
@@ -460,7 +466,6 @@ def train_model():
             jump()            
             duck()
             handle_obstacles()
-            handle_flag()
 
             logic()
             
@@ -504,7 +509,7 @@ def use_model():
 
         # Use the model to predict the action
         state = get_current_state()
-        q_values = loaded_model.predict(state.reshape(1, 8))
+        q_values = loaded_model.predict(state.reshape(1, 7))
         action = np.argmax(q_values)
 
         # Execute action in the environment
@@ -542,22 +547,16 @@ def main():
     obstacles.append(Obstacle(1, cactus1_img, WIDTH, HEIGHT / 2))
     #obstacles.append(Obstacle(5, ufo_img, WIDTH, HEIGHT / 2 - 96))
 
-
     # place flag far to the right
-    flag_rect.x = FLAG_POS
-        
-    #clouds.append(Cloud(WIDTH / 2, HEIGHT / 4))
-    #clouds.append(Cloud(WIDTH / 4, HEIGHT / 6))
-    #clouds.append(Cloud(WIDTH / 1.5, HEIGHT / 8))
-    
+    flag_rect.x = FLAG_POS     
    
     #play_game()
     train_model()
     #use_model()
     
     # Restore the original standard output
-    #sys.stdout = original_stdout
-    #f.close()
+    sys.stdout = original_stdout
+    global_log_file.close()
 
 if __name__ == "__main__":
     main()
