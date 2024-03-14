@@ -10,6 +10,7 @@ import pygame
 import random
 import sys
 import time
+import pickle
 
 WIDTH, HEIGHT = 500, 400
 WHITE = (255, 255, 255)
@@ -389,6 +390,17 @@ def get_reward():
         else:
             return 1
 
+# Save replay memory to a file
+def save_replay_memory(replay_memory, filename):
+    with open(filename, 'wb') as f:
+        pickle.dump(replay_memory, f)
+
+# Load replay memory from a file
+def load_replay_memory(filename):
+    with open(filename, 'rb') as f:
+        replay_memory = pickle.load(f)
+    return replay_memory
+
 def train_model():
 
     global player_x, player_y, game_over, you_win
@@ -399,8 +411,10 @@ def train_model():
     replay_memory_capacity = 10000
     replay_memory = deque(maxlen=replay_memory_capacity)
     
-    #model = load_model('dino_skier_model_200_ok.h5')
-    #epsilon = 0.0486  # Set a low exploration rate (like 0.1)
+    #print("Resuming training, loading the trained model and replay memory.")
+    #model = load_model('dino_skier_model.h5')
+    #epsilon = 0.103617  # Set a low exploration rate (like 0.1)
+    #replay_memory = load_replay_memory("replay_memory_2.pkl")
 
     for episode in range(num_episodes):
         reset_game()
@@ -491,6 +505,7 @@ def train_model():
 
     # Save the trained model
     model.save("dino_skier_model.h5")
+    save_replay_memory(replay_memory, "replay_memory.pkl")
 
 
 def use_model():
@@ -498,7 +513,7 @@ def use_model():
     loaded_model = load_model('dino_skier_model.h5')
 
     # Reset the game and get the initial state
-    reset_game()
+    # reset_game()
     state = get_current_state()
 
     while not game_over:
@@ -518,12 +533,12 @@ def use_model():
         # Observe new state and reward
         new_state = get_current_state()
         collide()
+        handle_flag()
         reward = get_reward()
 
         jump()
         duck()
         handle_obstacles()
-        handle_flag()
 
         logic()
 
@@ -541,6 +556,7 @@ def use_model():
 
 def main():
     np.random.seed(1)
+    random.seed(2)
     #random.seed(SEED)
     obstacle_rng.seed(SEED)
     
@@ -550,8 +566,8 @@ def main():
     # place flag far to the right
     flag_rect.x = FLAG_POS     
    
-    #play_game()
-    train_model()
+    play_game()
+    #train_model()
     #use_model()
     
     # Restore the original standard output
