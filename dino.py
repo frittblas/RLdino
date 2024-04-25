@@ -17,7 +17,7 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
-FPS = 60
+FPS = 90
 
 JUMP_VEL = 6.0
 GRAVITY = 0.4
@@ -62,7 +62,7 @@ points = 0
 x_pos_bg = 0
 y_pos_bg = HEIGHT / 2 + 20
 
-speed = 5.0
+speed = 10.0
 jump_vel = JUMP_VEL
 
 line_y = HEIGHT / 2 # ground line
@@ -152,13 +152,13 @@ def reset_game():
     is_jumping = False
     is_ducking = False
     jump_vel = JUMP_VEL
-    speed = 5.0
+    speed = 10.0
     
     flag_rect.x = FLAG_POS
     
     obstacles.clear()
     
-    obstacle_rng.seed(SEED)
+    #obstacle_rng.seed(SEED)
     
     obstacles.append(Obstacle(1, cactus1_img, WIDTH, HEIGHT / 2))
     #obstacles.append(Obstacle(5, ufo_img, WIDTH, HEIGHT / 2 - 96))
@@ -250,9 +250,11 @@ def logic():
     
     #increase points slowly but no fractions are printed
     if is_ducking:
-        points += 0.05
-    else:
+        #points += 0.05
         points += 0.1
+    else:
+        #points += 0.1
+        points += 0.2
     
         
 def background():
@@ -558,7 +560,7 @@ def main():
     np.random.seed(1)
     random.seed(2)
     #random.seed(SEED)
-    obstacle_rng.seed(SEED)
+    #obstacle_rng.seed(SEED)
     
     obstacles.append(Obstacle(1, cactus1_img, WIDTH, HEIGHT / 2))
     #obstacles.append(Obstacle(5, ufo_img, WIDTH, HEIGHT / 2 - 96))
