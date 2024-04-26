@@ -244,7 +244,7 @@ def place_obstacles():
 def logic():
     global speed, points
     #increase speed
-    speed += 0.001
+    #speed += 0.001
     if speed > MAX_SPEED:
         speed = MAX_SPEED
     
@@ -413,10 +413,10 @@ def train_model():
     replay_memory_capacity = 10000
     replay_memory = deque(maxlen=replay_memory_capacity)
     
-    #print("Resuming training, loading the trained model and replay memory.")
-    #model = load_model('dino_skier_model.h5')
-    #epsilon = 0.103617  # Set a low exploration rate (like 0.1)
-    #replay_memory = load_replay_memory("replay_memory_2.pkl")
+    print("Resuming training, loading the trained model and replay memory.")
+    model = load_model('dino_skier_model.h5')
+    epsilon = 0.0001  # Set a low exploration rate (like 0.1)
+    replay_memory = load_replay_memory("replay_memory.pkl")
 
     for episode in range(num_episodes):
         reset_game()
@@ -568,8 +568,8 @@ def main():
     # place flag far to the right
     flag_rect.x = FLAG_POS     
    
-    play_game()
-    #train_model()
+    #play_game()
+    train_model()
     #use_model()
     
     # Restore the original standard output
