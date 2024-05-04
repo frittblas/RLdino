@@ -20,7 +20,7 @@ def process_file(filename):
             scores.append({"You Win! Points": rounded_score})
 
     # Save scores to CSV file
-    csv_filename = "scores2-2.csv"
+    csv_filename = "scores_hans_400.csv"
     with open(csv_filename, 'w', newline='') as csvfile:
         fieldnames = ['You Loose! Points', 'You Win! Points']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -33,7 +33,7 @@ def process_file(filename):
 
 
 def main():
-    process_file("2_2.txt")
+    process_file("output_hans_4.txt")
 
 if __name__ == "__main__":
     main()

@@ -17,7 +17,7 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
-FPS = 90
+FPS = 105
 
 JUMP_VEL = 6.0
 GRAVITY = 0.4
@@ -327,8 +327,9 @@ def play_game():
     global points, game_over, you_win
     global is_jumping, is_ducking
     global dino_rect, speed
+    tries = 100
 
-    while True:
+    while tries > 0:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -367,6 +368,8 @@ def play_game():
             else:
                 print("You Loose! Points: ", points)
             reset_game()
+            
+            tries -= 1
 
         clock.tick(FPS)
     
@@ -548,7 +551,7 @@ def use_model():
         background()
         update_display(True)
 
-        clock.tick(FPS)
+        #clock.tick(FPS)
 
     if you_win:
         print("You Win! Points: ", points)
@@ -568,8 +571,8 @@ def main():
     # place flag far to the right
     flag_rect.x = FLAG_POS     
    
-    #play_game()
-    train_model()
+    play_game()
+    #train_model()
     #use_model()
     
     # Restore the original standard output
