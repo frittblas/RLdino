@@ -1,12 +1,28 @@
 Dino-skier
 
-Reinforcement learning Dino game
+Hans Strömquist, Adam Holgersson 2024
+
+Controls:
+
+Jump: up-arrow or space
+Duck: down-arrow
+
+Reinforcement Learning Dino game
 
 pip install pygame
 
-(also install tensorflow etc)
+(also install tensorflow, keras, numpy)
 
-TODO:
+To play the game uncomment line 574 in dino.py (play_game())
+To train the model uncomment line 575 in dino.py (train_game())
+To play the game using the trained model model uncomment line 576 in dino.py (use_model())
 
-- Add less reward/points when ducking
-- Add time score reward
+Make sure the other two function calls an commented out accordingly.
+
+
+Additional notes:
+
+The scores are automatically saved to output.txt
+Use makecsv.py to convert scores to csv-file.
+
+Output.txt gets overwritten each game session!
