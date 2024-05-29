@@ -26,3 +26,4 @@ The scores are automatically saved to output.txt
 Use makecsv.py to convert scores to csv-file.
 
 Output.txt gets overwritten each game session!
+![dino_anim](https://github.com/frittblas/RLdino/assets/34107055/9fc89347-0c5e-46b1-a07d-9ebdcf72f201)
